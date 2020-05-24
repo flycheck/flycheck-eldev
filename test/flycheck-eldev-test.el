@@ -44,11 +44,11 @@
         (cond ((and actual expected)
                (-when-let (regexp (plist-get expected :matches))
                  (unless (string-match-p regexp (flycheck-error-message actual))
-                   (ert-fail (format-message "unexpected error %S: expected message matching '%s'" actual regexp)))))
+                   (ert-fail (format "unexpected error %S: expected message matching '%s'" actual regexp)))))
               (actual
-               (ert-fail (format-message "unexpected error: %S" actual)))
+               (ert-fail (format "unexpected error: %S" actual)))
               (expected
-               (ert-fail (format-message "expected error not detected: %S" expected))))))))
+               (ert-fail (format "expected error not detected: %S" expected))))))))
 
 (ert-deftest flycheck-eldev-basics-1 ()
   (flycheck-eldev--test "project-a/project-a.el"
