@@ -1,0 +1,10 @@
+; -*- mode: emacs-lisp; lexical-binding: t; no-byte-compile: t -*-
+
+(eldev-use-package-archive 'melpa-stable)
+
+;; Flycheck 32 is not released yet, use snapshots.
+(eldev-use-package-archive 'melpa-unstable)
+
+
+;; Avoid including files in test "projects".
+(setf eldev-standard-excludes (append eldev-standard-excludes '("./test/*/")))
