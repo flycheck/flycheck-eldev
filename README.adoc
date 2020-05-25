@@ -4,6 +4,9 @@
 
 = flycheck-eldev
 
+image:https://img.shields.io/badge/license-GPL_3-green.svg[License: GPL 3, link=http://www.gnu.org/licenses/gpl-3.0.txt]
+image:https://api.travis-ci.org/flycheck/flycheck-eldev.svg[Build status, link=https://travis-ci.org/flycheck/flycheck-eldev]
+
 Make {uri-flycheck}[Flycheck] use proper dependencies in
 {uri-eldev}[Eldev] projects.
 
