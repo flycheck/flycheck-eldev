@@ -1,10 +1,13 @@
 :source-language: lisp
 :uri-flycheck: https://www.flycheck.org/
 :uri-eldev: https://github.com/doublep/eldev
+:uri-melpa-stable: https://stable.melpa.org/#/flycheck-eldev
+:uri-melpa-unstable: https://melpa.org/#/flycheck-eldev
 
 = flycheck-eldev
 
 image:https://img.shields.io/badge/license-GPL_3-green.svg[License: GPL 3, link=http://www.gnu.org/licenses/gpl-3.0.txt]
+image:http://stable.melpa.org/packages/flycheck-eldev-badge.svg[Melpa Stable, link=http://stable.melpa.org/#/flycheck-eldev]
 image:https://api.travis-ci.org/flycheck/flycheck-eldev.svg[Build status, link=https://travis-ci.org/flycheck/flycheck-eldev]
 
 Make {uri-flycheck}[Flycheck] use proper dependencies in
@@ -31,3 +34,13 @@ require that.
 
 * Additional test dependencies (see `eldev-add-extra-dependencies`)
   are seen from the test files, but not from the main files.
+
+== Installation
+
+Download and install the package from {uri-melpa-stable}[MELPA Stable]
+or {uri-melpa-unstable}[MELPA].  No further steps necessary: once the
+package is installed, it is active and Flycheck will detect any Eldev
+projects on-the-fly.
+
+If you want to deactivate the package for some reason, set variable
+`flycheck-eldev-active` to nil.
