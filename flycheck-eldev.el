@@ -54,6 +54,8 @@ If FROM is nil, search from `default-directory'."
     (expand-file-name root)))
 
 
+;; Needed because of the advice autoloading at the end.
+;;;###autoload
 (defun flycheck-eldev--compute-working-directory (original checker &rest etc)
   "Use Eldev project root when checking Elisp.
 If not inside an Eldev project or when `flycheck-eldev-active' is
@@ -62,6 +64,7 @@ nil, just call the original function."
         (flycheck-eldev-find-root))
       (apply original checker etc)))
 
+;;;###autoload
 (defun flycheck-eldev--start-command-checker (original checker callback &rest etc)
   "Use Eldev instead of raw Emacs when appropriate."
   (if (and flycheck-eldev-active (eq checker 'emacs-lisp) (flycheck-eldev-find-root))
@@ -164,9 +167,12 @@ nil, just call the original function."
           `(message "setup:1:1: Error: %s" ,flycheck-eldev-incompatible-error)))))
 
 
-;; We don't really define anything new, just hack what Flycheck already provides a bit.
-(advice-add #'flycheck-compute-working-directory :around #'flycheck-eldev--compute-working-directory)
-(advice-add #'flycheck-start-command-checker     :around #'flycheck-eldev--start-command-checker)
+;; Make the package effectively active even without `require'.
+;;;###autoload
+(progn
+  ;; We don't really define anything new, just hack what Flycheck already provides a bit.
+  (advice-add #'flycheck-compute-working-directory :around #'flycheck-eldev--compute-working-directory)
+  (advice-add #'flycheck-start-command-checker     :around #'flycheck-eldev--start-command-checker))
 
 
 (provide 'flycheck-eldev)
