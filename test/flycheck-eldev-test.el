@@ -50,8 +50,19 @@
               (expected
                (ert-fail (format "expected error not detected: %S" expected))))))))
 
+
 (ert-deftest flycheck-eldev-basics-1 ()
   (flycheck-eldev--test "project-a/project-a.el"
+    (flycheck-eldev--test-recheck)
+    (flycheck-eldev--test-expect-no-errors)))
+
+(ert-deftest flycheck-eldev-self-1 ()
+  (flycheck-eldev--test "../flycheck-eldev.el"
+    (flycheck-eldev--test-recheck)
+    (flycheck-eldev--test-expect-no-errors)))
+
+(ert-deftest flycheck-eldev-self-2 ()
+  (flycheck-eldev--test "flycheck-eldev-test.el"
     (flycheck-eldev--test-recheck)
     (flycheck-eldev--test-expect-no-errors)))
 
