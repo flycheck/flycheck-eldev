@@ -9,7 +9,7 @@
 (defmacro flycheck-eldev--test (file &rest body)
   (declare (indent 1) (debug (sexp body)))
   ;; Don't use `emacs-lisp-checkdoc'.
-  `(let ((flycheck-checkers                   '(emacs-lisp))
+  `(let ((flycheck-checkers                   (--filter (memq it '(emacs-lisp elisp-eldev)) flycheck-checkers))
          (flycheck-disabled-checkers          nil)
          (flycheck-check-syntax-automatically nil)
          (file                                (expand-file-name ,file flycheck-eldev--test-dir)))
@@ -19,6 +19,16 @@
        (emacs-lisp-mode)
        (flycheck-mode 1)
        ,@body)))
+
+(defmacro flycheck-eldev--test-with-temp-file (file content-creation &rest body)
+  (declare (indent 2) (debug (sexp form body)))
+  `(let ((file (expand-file-name ,file flycheck-eldev--test-dir)))
+     (ignore-errors (delete-file file))
+     (with-temp-file file
+       ,content-creation)
+     (unwind-protect
+         (progn ,@body)
+       (ignore-errors (delete-file file)))))
 
 (defun flycheck-eldev--test-recheck ()
   (flycheck-buffer)
@@ -89,6 +99,14 @@
 (ert-deftest flycheck-eldev-add-dependency-1 ()
   (flycheck-eldev--test "project-a/project-a.el"
     (search-forward "(dependency-a \"1.0\")")
-    (insert " (some-totally-bulshit-dependency)")
+    (insert " (some-totally-bullshit-dependency)")
     (flycheck-eldev--test-recheck)
     (flycheck-eldev--test-expect-errors '(:matches "not available"))))
+
+;; Test that faulty project initialization code is handled fine.
+(ert-deftest flycheck-eldev-faulty-eldev-local-1 ()
+  (flycheck-eldev--test-with-temp-file "project-a/Eldev-local"
+      (insert "this is not a valid Lisp")
+    (flycheck-eldev--test "project-a/project-a.el"
+      (flycheck-eldev--test-recheck)
+      (flycheck-eldev--test-expect-errors '(:matches "cannot be initialized")))))

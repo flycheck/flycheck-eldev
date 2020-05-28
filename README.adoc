@@ -1,6 +1,7 @@
 :source-language: lisp
 :uri-flycheck: https://www.flycheck.org/
 :uri-eldev: https://github.com/doublep/eldev
+:uri-eldev-installation: https://github.com/doublep/eldev#installation
 :uri-melpa-stable: https://stable.melpa.org/#/flycheck-eldev
 :uri-melpa-unstable: https://melpa.org/#/flycheck-eldev
 
@@ -41,6 +42,22 @@ Download and install the package from {uri-melpa-stable}[MELPA Stable]
 or {uri-melpa-unstable}[MELPA].  No further steps necessary: once the
 package is installed, it is active and Flycheck will detect any Eldev
 projects on-the-fly.
+
+For the extension to have any effect, you need to
+{uri-eldev-installation}[install Eldev].  If Flycheck doesn’t seem to
+recognize dependencies declared in a project, verify its setup (`C-c !
+v`).  Normally, you should see something like this at the top:
+
+....
+First checker to run:
+
+  elisp-eldev
+    - may enable:    yes
+    - may run:       t
+    - executable:    Found at /home/foo/.local/bin/eldev
+    - project root:  ~/foolib
+    - next checkers: emacs-lisp-checkdoc
+....
 
 If you want to deactivate the package for some reason, set variable
 `flycheck-eldev-active` to nil.
