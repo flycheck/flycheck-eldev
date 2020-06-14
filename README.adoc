@@ -57,8 +57,16 @@ First checker to run:
     - may run:       t
     - executable:    Found at /home/foo/.local/bin/eldev
     - project root:  ~/foolib
+    - trusted:       yes (...)
     - next checkers: emacs-lisp-checkdoc
 ....
+
+If the project is not trusted, customize some variables in
+`flycheck-eldev` group.  This is a security feature to avoid running
+potentially harmful code from unknown projects.  If you don’t need
+this precaution, set `flycheck-eldev-unknown-projects` to `trust` (it
+is still possible to actively blacklist individual projects after
+that).
 
 If you want to deactivate the package for some reason, set variable
 `flycheck-eldev-active` to nil.

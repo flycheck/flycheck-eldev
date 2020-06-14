@@ -63,6 +63,11 @@
   (require 'flycheck)
   (require 'dash))
 
+;; Compatibility.
+(eval-and-compile
+  (defalias 'flycheck-eldev--format-message
+    (if (fboundp 'format-message) #'format-message #'format)))
+
 
 (defgroup flycheck-eldev nil
   "Eldev support for Flycheck."
@@ -72,7 +77,11 @@
 
 (defcustom flycheck-eldev-whitelist nil
   "Projects in these directories are trusted and checking is enabled.
-Subdirectories are also included.
+
+Subdirectories are also included.  If a project is both
+whitelisted and blacklisted through its parent directories,
+closer parent wins (e.g. `~/foo' wins over `~' for a project in
+`~/foo/bar').
 
 Both Eldev and Flycheck itself on Elisp files are dangerous when
 run on untrusted code, because they can cause evaluation of
@@ -89,7 +98,7 @@ projects."
 Subdirectories are also included.
 
 See `flycheck-eldev-whitelist' for more information about safety
-concerns when checking Eldev projects."
+concerns when checking Eldev (or any Elisp) projects."
   :group 'flycheck-eldev
   :type  '(repeat directory))
 
@@ -105,7 +114,7 @@ before, you have already evaluated security risks and thus trust
 the code.
 
 See `flycheck-eldev-whitelist' for more information about safety
-concerns when checking Eldev projects."
+concerns when checking Eldev (or any Elisp) projects."
   :group 'flycheck-eldev
   :type  '(choice (const :tag "Trust" trust)
                   (const :tag "Don't trust" dont-trust)
@@ -139,6 +148,10 @@ If FROM is nil, search from `default-directory'."
     (expand-file-name root)))
 
 (defun flycheck-eldev-project-trusted-p (project-dir)
+  "Determine if the project in given directory can be trusted."
+  (car (flycheck-eldev--project-trust project-dir)))
+
+(defun flycheck-eldev--project-trust (project-dir)
   (let ((trusted-dirs   (--filter (file-in-directory-p project-dir it) flycheck-eldev-whitelist))
         (untrusted-dirs (--filter (file-in-directory-p project-dir it) flycheck-eldev-blacklist))
         most-specific)
@@ -146,23 +159,32 @@ If FROM is nil, search from `default-directory'."
       (unless (and most-specific (file-in-directory-p most-specific dir))
         (setf most-specific dir)))
     (if most-specific
-        (member most-specific trusted-dirs)
+        (let ((trusted (not (member most-specific untrusted-dirs))))
+          `(,trusted . ,(flycheck-eldev--format-message (if trusted "`%s' is whitelisted" "`%s' is blacklisted") most-specific)))
       (pcase flycheck-eldev-unknown-projects
-        (`trust                     t)
-        (`trust-if-ever-initialized (file-exists-p (expand-file-name ".eldev/ever-initialized" project-dir)))
+        (`trust                     '(t . "trusted by default"))
+        (`trust-if-ever-initialized (if (file-exists-p (expand-file-name ".eldev/ever-initialized" project-dir))
+                                        '(t . "externally initialized")
+                                      '(nil . "apparently never initialized")))
         ;; Handle everything else as `dont-trust'.
-        (_                          nil)))))
+        (_                          '(nil . "not trusted by default"))))))
 
 
 (defun flycheck-eldev--verify (&rest _)
   (or (unless flycheck-eldev-active
         `(,(flycheck-verification-result-new
             :label "status" :message "Deactivated (see `flycheck-eldev-active')" :face '(bold warning))))
-      (let ((root (flycheck-eldev-find-root)))
+      (let* ((root  (flycheck-eldev-find-root))
+             (trust (when root (flycheck-eldev--project-trust root))))
         `(,(flycheck-verification-result-new
             :label   "project root"
             :message (if root (abbreviate-file-name (directory-file-name root)) "[not detected]")
-            :face    (if root 'success '(bold warning)))))))
+            :face    (if root 'success '(bold warning)))
+          ,@(when root
+              `(,(flycheck-verification-result-new
+                  :label   "trusted"
+                  :message (format "%s (%s)" (if (car trust) "yes" "no") (cdr trust))
+                  :face    (if (car trust) 'success '(bold warning)))))))))
 
 (defun flycheck-eldev--enabled-p (&rest arguments)
   (let ((super (flycheck-checker-get 'emacs-lisp 'enabled)))
@@ -250,8 +272,8 @@ If FROM is nil, search from `default-directory'."
                           (string-match-p (regexp-quote flycheck-eldev-project-is-not-trusted-error) message))
                 (setf message (concat message "\n\n" flycheck-eldev-general-error)))
               `(,(flycheck-eldev--create-fake-error buffer message)))
-          `(,(flycheck-eldev--create-fake-error buffer (flycheck--format-message "Eldev %s is required; please run `eldev upgrade-self'"
-                                                                                 flycheck-eldev--required-eldev-version)))))))
+          `(,(flycheck-eldev--create-fake-error buffer (flycheck-eldev--format-message "Eldev %s is required; please run `eldev upgrade-self'"
+                                                                                       flycheck-eldev--required-eldev-version)))))))
 
 (defun flycheck-eldev--eldev-new-enough-p ()
   ;; Might want to cache at some point.  On the other hand, it's not clear how to
