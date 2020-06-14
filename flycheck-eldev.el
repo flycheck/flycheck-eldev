@@ -72,6 +72,8 @@
 
 (defvar flycheck-eldev--byte-compilation-start-mark "--8<-- FLYCHECK BYTE-COMPILATION --8<--")
 
+(defvar flycheck-eldev--required-eldev-version "0.5")
+
 
 (defun flycheck-eldev-find-root (&optional from)
   "Get Eldev project root or nil, if not inside one.
@@ -134,22 +136,17 @@ If FROM is nil, search from `default-directory'."
     `("--quiet" "--no-time" "--color=never"
       "--no-debug" "--no-backtrace-on-abort"
       "--as-is" "--load-newer"
-      "--setup"
+      ;; Ignore the original file for project initialization purposes.  If
+      ;; `eldev-project-main-file' is specified, this does nothing.
+      "--setup-first"
       ,(flycheck-sexp-to-string
         `(advice-add #'eldev--package-dir-info :around
                      (lambda (original)
                        (eldev-advised
                         (#'insert-file-contents
-                         :around
-                         (lambda (original filename &rest arguments)
-                           ;; Ignore the original file for project initialization
-                           ;; purposes.  If `eldev-project-main-file' is specified, this
-                           ;; does nothing.
-                           (unless (file-equal-p filename ,real-filename)
-                             ;; Workaround, will probably go into Eldev itself:
-                             ;; `package-dir-info' chokes on unreadable files,
-                             ;; e.g. locks for buffers modified in Emacs.
-                             (ignore-errors (apply original filename arguments)))))
+                         :around (lambda (original filename &rest arguments)
+                                   (unless (file-equal-p filename ,real-filename)
+                                     (apply original filename arguments))))
                         (funcall original)))))
       ;; When checking project's main file, use the temporary as the main file instead.
       "--setup"
@@ -157,34 +154,49 @@ If FROM is nil, search from `default-directory'."
         `(when (and eldev-project-main-file (file-equal-p eldev-project-main-file ,real-filename))
            (setf eldev-project-main-file ,filename)))
       ;; Special handling for test files: load extra dependencies as if testing now.
+      ;; Likewise for loading roots.
       "--setup"
       ,(flycheck-sexp-to-string
         `(when (eldev-filter-files '(,real-filename) eldev-test-fileset)
-           (dolist (dependency (cdr (assq 'test eldev--extra-dependencies)))
-             (eldev-add-extra-dependencies 'exec dependency))))
+           (apply #'eldev-add-extra-dependencies 'exec (cdr (assq 'test eldev--extra-dependencies)))
+           (apply #'eldev-add-loading-roots 'exec (cdr (assq 'test eldev--loading-roots)))))
       "exec" "--load" "--dont-require" "--lexical"
       ,(flycheck-sexp-to-string `(eldev-output ,flycheck-eldev--byte-compilation-start-mark))
       ,(flycheck-sexp-to-string `(setf command-line-args-left (list "--" ,filename)))
       ,@(nreverse eval-forms))))
 
-(defun flycheck-eldev--parse-errors (output checker buffer &rest _)
+(defun flycheck-eldev--parse-errors (output _checker buffer &rest _)
   (or (flycheck-parse-output output 'emacs-lisp buffer)
-      ;; If there are no errors from Emacs
+      ;; Only if there are no errors from Emacs byte-compilation.
       (unless (string-match-p (regexp-quote flycheck-eldev--byte-compilation-start-mark) output)
-        (let ((message (string-trim output)))
-          ;; Don't add clarification to a few obvious errors.
-          (unless (string-match-p (rx bos "Dependency " (1+ any) " is not available") message)
-            (setf message (concat message "\n\n" flycheck-eldev-general-error)))
-          `(,(flycheck-error-new-at 1 1 'error message
-                                    :end-column (with-current-buffer buffer
-                                                  (save-excursion
-                                                    (save-restriction
-                                                      (widen)
-                                                      (goto-char 1)
-                                                      (end-of-line)
-                                                      (point))))
-                                    :checker    checker
-                                    :buffer     buffer))))))
+        (if (flycheck-eldev--eldev-is-new-enough)
+            (let ((message (string-trim output)))
+              ;; Don't add clarification to a few obvious errors.
+              (unless (string-match-p (rx bos "Dependency " (1+ any) " is not available") message)
+                (setf message (concat message "\n\n" flycheck-eldev-general-error)))
+              `(,(flycheck-eldev--create-fake-error buffer message)))
+          `(,(flycheck-eldev--create-fake-error buffer (flycheck--format-message "Eldev %s is required; please run `eldev upgrade-self'"
+                                                                                 flycheck-eldev--required-eldev-version)))))))
+
+(defun flycheck-eldev--eldev-is-new-enough ()
+  ;; Might want to cache at some point.  On the other hand, it's not clear how to
+  ;; invalidate the cache to avoid false errors when Eldev is upgraded.
+  (ignore-errors
+    (with-temp-buffer
+      (and (= (call-process "eldev" nil t nil "--quiet" "--setup-first" (flycheck-sexp-to-string `(setf eldev-skip-project-config t)) "version") 0)
+           (version<= flycheck-eldev--required-eldev-version (string-trim (buffer-string)))))))
+
+(defun flycheck-eldev--create-fake-error (buffer message)
+  (flycheck-error-new-at 1 1 'error message
+                         :end-column (with-current-buffer buffer
+                                       (save-excursion
+                                         (save-restriction
+                                           (widen)
+                                           (goto-char 1)
+                                           (end-of-line)
+                                           (point))))
+                         :checker    'eldev-elisp
+                         :buffer     buffer))
 
 (defun flycheck-eldev--filter-errors (errors &rest _)
   ;; Don't filter our own errors.
