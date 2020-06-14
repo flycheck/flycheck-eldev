@@ -33,7 +33,8 @@
 ;; Features:
 ;;
 ;; * No additional steps to be performed from the command line, not
-;;   even `eldev prepare'.
+;;   even `eldev prepare'.  However, you might need to mark the
+;;   project as trusted, use M-x customize-group flycheck-eldev RET.
 ;;
 ;; * Project dependencies are seen by Flycheck in Emacs.  Similarly,
 ;;   if a package is not declared as a dependency of your project,
@@ -63,12 +64,65 @@
   (require 'dash))
 
 
+(defgroup flycheck-eldev nil
+  "Eldev support for Flycheck."
+  :prefix "flycheck-eldev-"
+  :group  'flycheck
+  :link   '(url-link :tag "GitHub" "https://github.com/flycheck/flycheck-eldev"))
+
+(defcustom flycheck-eldev-whitelist nil
+  "Projects in these directories are trusted and checking is enabled.
+Subdirectories are also included.
+
+Both Eldev and Flycheck itself on Elisp files are dangerous when
+run on untrusted code, because they can cause evaluation of
+arbitrary Elisp expressions.  Eldev — when loading files `Eldev'
+and `Eldev-local', Flycheck — when checking via byte-compiling
+(see e.g. `eval-when-compile', `eval-and-compile' forms).  For
+this reason, `flycheck-eldev' enables checking only in trusted
+projects."
+  :group 'flycheck-eldev
+  :type  '(repeat directory))
+
+(defcustom flycheck-eldev-blacklist nil
+  "Projects in these directories are not trusted and never checked.
+Subdirectories are also included.
+
+See `flycheck-eldev-whitelist' for more information about safety
+concerns when checking Eldev projects."
+  :group 'flycheck-eldev
+  :type  '(repeat directory))
+
+(defcustom flycheck-eldev-unknown-projects 'trust-if-ever-initialized
+  "How to handle projects that are neither white- nor blacklisted.
+
+Value must be a symbol: `trust', `dont-trust' or
+`trust-if-ever-initialized' (the default).  The last value means
+that a project is trusted if Eldev has ever been run in its
+directory (at least since the last `eldev clean .eldev').  The
+idea is that if you have knowingly run Eldev on the project
+before, you have already evaluated security risks and thus trust
+the code.
+
+See `flycheck-eldev-whitelist' for more information about safety
+concerns when checking Eldev projects."
+  :group 'flycheck-eldev
+  :type  '(choice (const :tag "Trust" trust)
+                  (const :tag "Don't trust" dont-trust)
+                  (const :tag "Trust if ever initialized" trust-if-ever-initialized)))
+
+
 (defvar flycheck-eldev-active t
   "Whether Eldev extension to Flycheck is active.")
 
 (defvar flycheck-eldev-general-error
   "Eldev cannot be initialized; check dependency declarations and file `Eldev'"
   "Error shown when Eldev cannot be initialized.")
+
+(defvar flycheck-eldev-project-is-not-trusted-error
+  "This project is not trusted and therefore checking is disabled.
+
+Type M-x customize-group flycheck-eldev RET to change this.")
 
 (defvar flycheck-eldev--byte-compilation-start-mark "--8<-- FLYCHECK BYTE-COMPILATION --8<--")
 
@@ -83,6 +137,21 @@ If FROM is nil, search from `default-directory'."
                     (lambda (dir) (or (file-exists-p (expand-file-name "Eldev" dir))
                                       (file-exists-p (expand-file-name "Eldev-local" dir))))))
     (expand-file-name root)))
+
+(defun flycheck-eldev-project-trusted-p (project-dir)
+  (let ((trusted-dirs   (--filter (file-in-directory-p project-dir it) flycheck-eldev-whitelist))
+        (untrusted-dirs (--filter (file-in-directory-p project-dir it) flycheck-eldev-blacklist))
+        most-specific)
+    (dolist (dir (append trusted-dirs untrusted-dirs nil))
+      (unless (and most-specific (file-in-directory-p most-specific dir))
+        (setf most-specific dir)))
+    (if most-specific
+        (member most-specific trusted-dirs)
+      (pcase flycheck-eldev-unknown-projects
+        (`trust                     t)
+        (`trust-if-ever-initialized (file-exists-p (expand-file-name ".eldev/ever-initialized" project-dir)))
+        ;; Handle everything else as `dont-trust'.
+        (_                          nil)))))
 
 
 (defun flycheck-eldev--verify (&rest _)
@@ -109,76 +178,82 @@ If FROM is nil, search from `default-directory'."
   (flycheck-eldev-find-root))
 
 (defun flycheck-eldev--build-command-line ()
-  ;; If the standard Emacs Lisp checker provides a command line we don't expect, throw it
-  ;; away and replace with one based on Flycheck 32.  Otherwise we rewrite the command
-  ;; line provided by the standard checker, so we get any future improvements for free.
-  (let* ((super         (let ((flycheck-emacs-lisp-load-path           nil)
-                              (flycheck-emacs-lisp-initialize-packages nil))
-                          (flycheck-checker-substituted-arguments 'emacs-lisp)))
-         (head          (-drop-last 2 super))
-         (tail          (-take-last 2 super))
-         (filename      (cadr tail))
-         (real-filename (buffer-file-name))
-         eval-forms)
-    (while head
-      (when (string= (pop head) "--eval")
-        (if (string-match-p (rx "(" (or "setq" "setf") " package-user-dir") (car head))
-            ;; Just discard, Eldev will take care of this.  Binding
-            ;; `flycheck-emacs-lisp-package-user-dir' to nil would not be enough.
-            (pop head)
-          (push (pop head) eval-forms))))
-    (unless (and (string= (car tail) "--")
-                 (--any (string-match-p (rx "(byte-compile") it) eval-forms)
-                 (--any (string-match-p (rx "command-line-args-left") it) eval-forms))
-      ;; If the command line is something we don't expect, use a failsafe.
-      (setf eval-forms `(,(flycheck-emacs-lisp-bytecomp-config-form) ,flycheck-emacs-lisp-check-form)))
-    ;; Explicitly specify various options in case a user has different defaults.
-    `("--quiet" "--no-time" "--color=never"
-      "--no-debug" "--no-backtrace-on-abort"
-      "--as-is" "--load-newer"
-      ;; Ignore the original file for project initialization purposes.  If
-      ;; `eldev-project-main-file' is specified, this does nothing.
-      "--setup-first"
-      ,(flycheck-sexp-to-string
-        `(advice-add #'eldev--package-dir-info :around
-                     (lambda (original)
-                       (eldev-advised
-                        (#'insert-file-contents
-                         :around (lambda (original filename &rest arguments)
-                                   (unless (file-equal-p filename ,real-filename)
-                                     (apply original filename arguments))))
-                        (funcall original)))))
-      ;; When checking project's main file, use the temporary as the main file instead.
-      "--setup"
-      ,(flycheck-sexp-to-string
-        `(when (and eldev-project-main-file (file-equal-p eldev-project-main-file ,real-filename))
-           (setf eldev-project-main-file ,filename)))
-      ;; Special handling for test files: load extra dependencies as if testing now.
-      ;; Likewise for loading roots.
-      "--setup"
-      ,(flycheck-sexp-to-string
-        `(when (eldev-filter-files '(,real-filename) eldev-test-fileset)
-           (apply #'eldev-add-extra-dependencies 'exec (cdr (assq 'test eldev--extra-dependencies)))
-           (apply #'eldev-add-loading-roots 'exec (cdr (assq 'test eldev--loading-roots)))))
-      "exec" "--load" "--dont-require" "--lexical"
-      ,(flycheck-sexp-to-string `(eldev-output ,flycheck-eldev--byte-compilation-start-mark))
-      ,(flycheck-sexp-to-string `(setf command-line-args-left (list "--" ,filename)))
-      ,@(nreverse eval-forms))))
+  `("--quiet" "--no-time" "--color=never" "--no-debug" "--no-backtrace-on-abort"
+    ,@(if (flycheck-eldev-project-trusted-p default-directory)
+          ;; If the standard Emacs Lisp checker provides a command line we don't expect,
+          ;; throw it away and replace with one based on Flycheck 32.  Otherwise we
+          ;; rewrite the command line provided by the standard checker, so we get any
+          ;; future improvements for free.
+          (let* ((super         (let ((flycheck-emacs-lisp-load-path           nil)
+                                      (flycheck-emacs-lisp-initialize-packages nil))
+                                  (flycheck-checker-substituted-arguments 'emacs-lisp)))
+                 (head          (-drop-last 2 super))
+                 (tail          (-take-last 2 super))
+                 (filename      (cadr tail))
+                 (real-filename (buffer-file-name))
+                 eval-forms)
+            (while head
+              (when (string= (pop head) "--eval")
+                (if (string-match-p (rx "(" (or "setq" "setf") " package-user-dir") (car head))
+                    ;; Just discard, Eldev will take care of this.  Binding
+                    ;; `flycheck-emacs-lisp-package-user-dir' to nil would not be enough.
+                    (pop head)
+                  (push (pop head) eval-forms))))
+            (unless (and (string= (car tail) "--")
+                         (--any (string-match-p (rx "(byte-compile") it) eval-forms)
+                         (--any (string-match-p (rx "command-line-args-left") it) eval-forms))
+              ;; If the command line is something we don't expect, use a failsafe.
+              (setf eval-forms `(,(flycheck-emacs-lisp-bytecomp-config-form) ,flycheck-emacs-lisp-check-form)))
+            ;; Explicitly specify various options in case a user has different defaults.
+            `("--as-is" "--load-newer"
+              ;; Ignore the original file for project initialization purposes.  If
+              ;; `eldev-project-main-file' is specified, this does nothing.
+              "--setup-first"
+              ,(flycheck-sexp-to-string
+                `(advice-add #'eldev--package-dir-info :around
+                             (lambda (original)
+                               (eldev-advised
+                                (#'insert-file-contents
+                                 :around (lambda (original filename &rest arguments)
+                                           (unless (file-equal-p filename ,real-filename)
+                                             (apply original filename arguments))))
+                                (funcall original)))))
+              ;; When checking project's main file, use the temporary as the main file
+              ;; instead.
+              "--setup"
+              ,(flycheck-sexp-to-string
+                `(when (and eldev-project-main-file (file-equal-p eldev-project-main-file ,real-filename))
+                   (setf eldev-project-main-file ,filename)))
+              ;; Special handling for test files: load extra dependencies as if testing
+              ;; now.  Likewise for loading roots.
+              "--setup"
+              ,(flycheck-sexp-to-string
+                `(when (eldev-filter-files '(,real-filename) eldev-test-fileset)
+                   (apply #'eldev-add-extra-dependencies 'exec (cdr (assq 'test eldev--extra-dependencies)))
+                   (apply #'eldev-add-loading-roots 'exec (cdr (assq 'test eldev--loading-roots)))))
+              "exec" "--load" "--dont-require" "--lexical"
+              ,(flycheck-sexp-to-string `(eldev-output ,flycheck-eldev--byte-compilation-start-mark))
+              ,(flycheck-sexp-to-string `(setf command-line-args-left (list "--" ,filename)))
+              ,@(nreverse eval-forms)))
+        `("--setup-first"
+          ,(flycheck-sexp-to-string
+            `(signal 'eldev-error '(,flycheck-eldev-project-is-not-trusted-error)))))))
 
 (defun flycheck-eldev--parse-errors (output _checker buffer &rest _)
   (or (flycheck-parse-output output 'emacs-lisp buffer)
       ;; Only if there are no errors from Emacs byte-compilation.
       (unless (string-match-p (regexp-quote flycheck-eldev--byte-compilation-start-mark) output)
-        (if (flycheck-eldev--eldev-is-new-enough)
+        (if (flycheck-eldev--eldev-new-enough-p)
             (let ((message (string-trim output)))
               ;; Don't add clarification to a few obvious errors.
-              (unless (string-match-p (rx bos "Dependency " (1+ any) " is not available") message)
+              (unless (or (string-match-p (rx bos "Dependency " (1+ any) " is not available") message)
+                          (string-match-p (regexp-quote flycheck-eldev-project-is-not-trusted-error) message))
                 (setf message (concat message "\n\n" flycheck-eldev-general-error)))
               `(,(flycheck-eldev--create-fake-error buffer message)))
           `(,(flycheck-eldev--create-fake-error buffer (flycheck--format-message "Eldev %s is required; please run `eldev upgrade-self'"
                                                                                  flycheck-eldev--required-eldev-version)))))))
 
-(defun flycheck-eldev--eldev-is-new-enough ()
+(defun flycheck-eldev--eldev-new-enough-p ()
   ;; Might want to cache at some point.  On the other hand, it's not clear how to
   ;; invalidate the cache to avoid false errors when Eldev is upgraded.
   (ignore-errors
@@ -186,8 +261,8 @@ If FROM is nil, search from `default-directory'."
       (and (= (call-process "eldev" nil t nil "--quiet" "--setup-first" (flycheck-sexp-to-string `(setf eldev-skip-project-config t)) "version") 0)
            (version<= flycheck-eldev--required-eldev-version (string-trim (buffer-string)))))))
 
-(defun flycheck-eldev--create-fake-error (buffer message)
-  (flycheck-error-new-at 1 1 'error message
+(defun flycheck-eldev--create-fake-error (buffer message &optional level)
+  (flycheck-error-new-at 1 1 (or level 'error) message
                          :end-column (with-current-buffer buffer
                                        (save-excursion
                                          (save-restriction
@@ -195,7 +270,7 @@ If FROM is nil, search from `default-directory'."
                                            (goto-char 1)
                                            (end-of-line)
                                            (point))))
-                         :checker    'eldev-elisp
+                         :checker    'elisp-eldev
                          :buffer     buffer))
 
 (defun flycheck-eldev--filter-errors (errors &rest _)

@@ -21,7 +21,8 @@ require that.
 == Features
 
 * No additional steps to be performed from the command line, not even
-  `eldev prepare`.
+  `eldev prepare`.  However, you might need to mark the project as
+  trusted, use `M-x customize-group flycheck-eldev RET`.
 
 * Project dependencies are seen by Flycheck in Emacs.  Similarly, if a
   package is not declared as a dependency of your project, Flycheck

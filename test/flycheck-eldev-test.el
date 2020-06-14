@@ -8,17 +8,28 @@
 
 (defmacro flycheck-eldev--test (file &rest body)
   (declare (indent 1) (debug (sexp body)))
-  ;; Don't use `emacs-lisp-checkdoc'.
-  `(let ((flycheck-checkers                   (--filter (memq it '(emacs-lisp elisp-eldev)) flycheck-checkers))
-         (flycheck-disabled-checkers          nil)
-         (flycheck-check-syntax-automatically nil)
-         (file                                (expand-file-name ,file flycheck-eldev--test-dir)))
-     (with-temp-buffer
-       (insert-file-contents file t)
-       (setf default-directory (file-name-directory file))
-       (emacs-lisp-mode)
-       (flycheck-mode 1)
-       ,@body)))
+  (let ((flycheck-eldev-whitelist        nil)
+        (flycheck-eldev-blacklist        nil)
+        (flycheck-eldev-unknown-projects 'trust))
+    (while (keywordp (car body))
+      (pcase (pop body)
+        (:whitelist        (setf flycheck-eldev-whitelist        (pop body)))
+        (:blacklist        (setf flycheck-eldev-blacklist        (pop body)))
+        (:unknown-projects (setf flycheck-eldev-unknown-projects (pop body)))))
+    ;; Don't use `emacs-lisp-checkdoc'.
+    `(let ((flycheck-checkers                   (--filter (memq it '(emacs-lisp elisp-eldev)) flycheck-checkers))
+           (flycheck-disabled-checkers          nil)
+           (flycheck-check-syntax-automatically nil)
+           (flycheck-eldev-whitelist            ',flycheck-eldev-whitelist)
+           (flycheck-eldev-blacklist            ',flycheck-eldev-blacklist)
+           (flycheck-eldev-unknown-projects     ',flycheck-eldev-unknown-projects)
+           (file                                (expand-file-name ,file flycheck-eldev--test-dir)))
+       (with-temp-buffer
+         (insert-file-contents file t)
+         (setf default-directory (file-name-directory file))
+         (emacs-lisp-mode)
+         (flycheck-mode 1)
+         ,@body))))
 
 (defmacro flycheck-eldev--test-with-temp-file (file content-creation &rest body)
   (declare (indent 2) (debug (sexp form body)))
@@ -110,3 +121,50 @@
     (flycheck-eldev--test "project-a/project-a.el"
       (flycheck-eldev--test-recheck)
       (flycheck-eldev--test-expect-errors '(:matches "cannot be initialized")))))
+
+
+(ert-deftest flycheck-eldev-project-trusted-p-1 ()
+  (let ((flycheck-eldev-whitelist        nil)
+        (flycheck-eldev-blacklist        nil)
+        (flycheck-eldev-unknown-projects 'dont-trust))
+    (should-not (flycheck-eldev-project-trusted-p "~/foo"))))
+
+(ert-deftest flycheck-eldev-project-trusted-p-2 ()
+  (let ((flycheck-eldev-whitelist        nil)
+        (flycheck-eldev-blacklist        nil)
+        (flycheck-eldev-unknown-projects 'trust))
+    (should (flycheck-eldev-project-trusted-p "~/foo"))))
+
+(ert-deftest flycheck-eldev-project-trusted-p-3 ()
+  (let ((flycheck-eldev-whitelist        '("~"))
+        (flycheck-eldev-blacklist        nil)
+        (flycheck-eldev-unknown-projects 'dont-trust))
+    (should (flycheck-eldev-project-trusted-p "~/foo"))))
+
+(ert-deftest flycheck-eldev-project-trusted-p-4 ()
+  ;; Some ugliness because `file-in-directory-p' fails if `dir' doesn't exist.
+  (let* ((foo                              user-emacs-directory)
+         (parent                           (file-name-directory (directory-file-name foo)))
+         (flycheck-eldev-whitelist        `(,parent))
+         (flycheck-eldev-blacklist        `(,foo))
+         (flycheck-eldev-unknown-projects 'trust))
+    (skip-unless (and (file-directory-p foo) (not (equal parent foo))))
+    (should-not (flycheck-eldev-project-trusted-p foo))
+    (should-not (flycheck-eldev-project-trusted-p (expand-file-name "bar" foo)))))
+
+(ert-deftest flycheck-eldev-project-trusted-p-5 ()
+  (let* ((foo                              user-emacs-directory)
+         (parent                           (file-name-directory (directory-file-name foo)))
+         (flycheck-eldev-whitelist        `(,foo))
+         (flycheck-eldev-blacklist        `(,parent))
+         (flycheck-eldev-unknown-projects 'trust))
+    (skip-unless (and (file-directory-p foo) (not (equal parent foo))))
+    (should (flycheck-eldev-project-trusted-p foo))
+    (should (flycheck-eldev-project-trusted-p (expand-file-name "bar" foo)))))
+
+
+(ert-deftest flycheck-eldev-project-trust-1 ()
+  (flycheck-eldev--test "project-a/project-a.el"
+    :unknown-projects dont-trust
+    (flycheck-eldev--test-recheck)
+    (flycheck-eldev--test-expect-errors '(:matches "not trusted"))))
