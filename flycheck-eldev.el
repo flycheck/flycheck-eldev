@@ -213,6 +213,18 @@ See Info Node `(elisp)Byte Compilation'."
     :error-parser      flycheck-eldev--parse-errors
     :error-filter      flycheck-eldev--filter-errors
     :next-checkers     (emacs-lisp-checkdoc))
+  ;; Hack: Eldev is run from the project root, but Emacs reports syntax errors without a
+  ;; path.  Therefore, we reset directory from the root to where the file is actually
+  ;; contained after the process is started.
+  ;;
+  ;; See also https://github.com/flycheck/flycheck/issues/1785
+  (let ((real-start (flycheck-checker-get 'elisp-eldev 'start)))
+    (setf (flycheck-checker-get 'elisp-eldev 'start)
+          (lambda (&rest arguments)
+            (let ((process (apply real-start arguments)))
+              (when (processp process)
+                (process-put process 'flycheck-working-directory (file-name-directory (buffer-file-name))))
+              process))))
   ;; Deactivate 0.9 hacks.
   (advice-remove 'flycheck-compute-working-directory 'flycheck-eldev--compute-working-directory)
   (advice-remove 'flycheck-start-command-checker     'flycheck-eldev--start-command-checker))
