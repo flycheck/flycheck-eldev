@@ -335,10 +335,7 @@ See Info Node `(elisp)Byte Compilation'."
                 (process-put process 'flycheck-working-directory (file-name-directory (buffer-file-name))))
               process))))
   ;; I don't think we need a separate package just for this, so let's do it here.
-  (add-to-list 'auto-mode-alist `(,(rx "/" (or "Eldev" "Eldev-local") eos) . emacs-lisp-mode) t)
-  ;; Deactivate 0.9 hacks.
-  (advice-remove 'flycheck-compute-working-directory 'flycheck-eldev--compute-working-directory)
-  (advice-remove 'flycheck-start-command-checker     'flycheck-eldev--start-command-checker))
+  (add-to-list 'auto-mode-alist `(,(rx "/" (or "Eldev" "Eldev-local") eos) . emacs-lisp-mode) t))
 
 
 ;;;###autoload
