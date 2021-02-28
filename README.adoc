@@ -37,6 +37,10 @@ require that.
 * Additional test dependencies (see `eldev-add-extra-dependencies`)
   are seen from the test files, but not from the main files.
 
+* Also checks files `Eldev` and `Eldev-local` (as long as they are
+  byte-compilable, but this is a common Flycheck requirement).  Detect
+  wrong `(eldev-...)` function calls as you type!
+
 == Installation
 
 Download and install the package from {uri-melpa-stable}[MELPA Stable]

@@ -10,14 +10,18 @@
   (declare (indent 1) (debug (sexp body)))
   (let ((flycheck-eldev-whitelist        nil)
         (flycheck-eldev-blacklist        nil)
-        (flycheck-eldev-unknown-projects 'trust))
+        (flycheck-eldev-unknown-projects 'trust)
+        (enabled-checkers                '(emacs-lisp elisp-eldev)))
     (while (keywordp (car body))
       (pcase (pop body)
         (:whitelist        (setf flycheck-eldev-whitelist        (pop body)))
         (:blacklist        (setf flycheck-eldev-blacklist        (pop body)))
-        (:unknown-projects (setf flycheck-eldev-unknown-projects (pop body)))))
+        (:unknown-projects (setf flycheck-eldev-unknown-projects (pop body)))
+        (:enable-checkdoc  (if (pop body)
+                               (push 'emacs-lisp-checkdoc enabled-checkers)
+                             (setf enabled-checkers (delq 'emacs-lisp-checkdoc enabled-checkers))))))
     ;; Don't use `emacs-lisp-checkdoc'.
-    `(let ((flycheck-checkers                   (--filter (memq it '(emacs-lisp elisp-eldev)) flycheck-checkers))
+    `(let ((flycheck-checkers                   (--filter (memq it ',enabled-checkers) flycheck-checkers))
            (flycheck-disabled-checkers          nil)
            (flycheck-check-syntax-automatically nil)
            (flycheck-eldev-whitelist            ',flycheck-eldev-whitelist)
@@ -77,6 +81,14 @@
     (flycheck-eldev--test-recheck)
     (flycheck-eldev--test-expect-no-errors)))
 
+(ert-deftest flycheck-eldev-basics-2 ()
+  (flycheck-eldev--test "project-a/Eldev"
+    ;; Enable `checkdoc'.  Must be disabled at runtime (currently through our own hack)
+    ;; for the test to pass.
+    :enable-checkdoc t
+    (flycheck-eldev--test-recheck)
+    (flycheck-eldev--test-expect-no-errors)))
+
 (ert-deftest flycheck-eldev-self-1 ()
   (flycheck-eldev--test "../flycheck-eldev.el"
     (flycheck-eldev--test-recheck)
@@ -84,6 +96,17 @@
 
 (ert-deftest flycheck-eldev-self-2 ()
   (flycheck-eldev--test "flycheck-eldev-test.el"
+    (flycheck-eldev--test-recheck)
+    (flycheck-eldev--test-expect-no-errors)))
+
+;; This indirectly tests that we see functions in `eldev' namespace from `Eldev' and
+;; `Eldev-local'.  Unfortunately, we also see them in normal files, but I cannot think of
+;; a robust way to avoid this currently.
+(ert-deftest flycheck-eldev-self-3 ()
+  (flycheck-eldev--test "../Eldev"
+    ;; Enable `checkdoc'.  Must be disabled at runtime (currently through our own hack)
+    ;; for the test to pass.
+    :enable-checkdoc t
     (flycheck-eldev--test-recheck)
     (flycheck-eldev--test-expect-no-errors)))
 
@@ -117,10 +140,26 @@
 ;; Test that faulty project initialization code is handled fine.
 (ert-deftest flycheck-eldev-faulty-eldev-local-1 ()
   (flycheck-eldev--test-with-temp-file "project-a/Eldev-local"
-      (insert "this is not a valid Lisp")
+      (insert "this-variable-certainly-doesnt-exist")
     (flycheck-eldev--test "project-a/project-a.el"
       (flycheck-eldev--test-recheck)
       (flycheck-eldev--test-expect-errors '(:matches "cannot be initialized")))))
+
+;; When checking the faulty `Eldev-local', we must not use it for initialization.
+(ert-deftest flycheck-eldev-faulty-eldev-local-2 ()
+  (flycheck-eldev--test-with-temp-file "project-a/Eldev-local"
+      (insert "this-variable-certainly-doesnt-exist")
+    (flycheck-eldev--test "project-a/Eldev-local"
+      (flycheck-eldev--test-recheck)
+      (flycheck-eldev--test-expect-errors '(:matches "this-variable-certainly-doesnt-exist")))))
+
+;; Test that `flycheck-eldev' really works on Eldev files if those are byte-compilable.
+(ert-deftest flycheck-eldev-suspicious-eldev-local-1 ()
+  (flycheck-eldev--test-with-temp-file "project-a/Eldev-local"
+      (insert "(defun just-for-testing () (function-with-this-name-certainly-doesnt-exist))")
+    (flycheck-eldev--test "project-a/Eldev-local"
+      (flycheck-eldev--test-recheck)
+      (flycheck-eldev--test-expect-errors '(:matches "function-with-this-name-certainly-doesnt-exist")))))
 
 
 (ert-deftest flycheck-eldev-project-trusted-p-1 ()

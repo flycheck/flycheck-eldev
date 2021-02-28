@@ -228,6 +228,11 @@ If FROM is nil, search from `default-directory'."
               (setf eval-forms `(,(flycheck-emacs-lisp-bytecomp-config-form) ,flycheck-emacs-lisp-check-form)))
             ;; Explicitly specify various options in case a user has different defaults.
             `("--as-is" "--load-newer"
+              ;; Don't load file `Eldev' or `Eldev-local' if we are checking it.
+              ,@(cond ((file-equal-p real-filename "Eldev")
+                       `("--setup-first" ,(flycheck-sexp-to-string '(setf eldev-skip-project-config t))))
+                      ((file-equal-p real-filename "Eldev-local")
+                       `("--setup-first" ,(flycheck-sexp-to-string '(setf eldev-skip-local-project-config t)))))
               ;; Ignore the original file for project initialization purposes.  If
               ;; `eldev-project-main-file' is specified, this does nothing.
               "--setup-first"
@@ -302,6 +307,17 @@ If FROM is nil, search from `default-directory'."
     (flycheck-filter-errors errors 'emacs-lisp)))
 
 
+(defvar flycheck-eldev--original-emacs-lisp-enabled-p nil)
+
+;; Easier to hack than to wait for https://github.com/flycheck/flycheck/pull/1832 to be
+;; "reviewed".  Disable `checkdoc' on Eldev files, it makes zero sense there.
+(defun flycheck-eldev--emacs-lisp-checkdoc-enabled-p ()
+  "Check whether to enable Emacs Lisp Checkdoc in the current buffer."
+  (and (funcall flycheck-eldev--original-emacs-lisp-enabled-p)
+       ;; These files are valid Lisp, but don't contain "standard" comments.
+       (not (member (file-name-base (or (buffer-file-name) "-")) '("Eldev" "Eldev-local")))))
+
+
 ;;;###autoload
 (defun flycheck-eldev--initialize ()
   (add-to-list 'flycheck-checkers 'elisp-eldev)
@@ -335,7 +351,11 @@ See Info Node `(elisp)Byte Compilation'."
                 (process-put process 'flycheck-working-directory (file-name-directory (buffer-file-name))))
               process))))
   ;; I don't think we need a separate package just for this, so let's do it here.
-  (add-to-list 'auto-mode-alist `(,(rx "/" (or "Eldev" "Eldev-local") eos) . emacs-lisp-mode) t))
+  (add-to-list 'auto-mode-alist `(,(rx "/" (or "Eldev" "Eldev-local") eos) . emacs-lisp-mode) t)
+  ;; Hack in disabling of `checkdoc' on Eldev files.
+  (unless flycheck-eldev--original-emacs-lisp-enabled-p
+    (setf flycheck-eldev--original-emacs-lisp-enabled-p        (flycheck-checker-get 'emacs-lisp-checkdoc 'enabled)
+          (flycheck-checker-get 'emacs-lisp-checkdoc 'enabled) #'flycheck-eldev--emacs-lisp-checkdoc-enabled-p)))
 
 
 ;;;###autoload
