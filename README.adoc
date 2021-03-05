@@ -9,7 +9,7 @@
 
 image:https://img.shields.io/badge/license-GPL_3-green.svg[License: GPL 3, link=http://www.gnu.org/licenses/gpl-3.0.txt]
 image:http://stable.melpa.org/packages/flycheck-eldev-badge.svg[Melpa Stable, link=http://stable.melpa.org/#/flycheck-eldev]
-image:https://api.travis-ci.org/flycheck/flycheck-eldev.svg[Build status, link=https://travis-ci.org/flycheck/flycheck-eldev]
+image:https://github.com/flycheck/flycheck-eldev/workflows/CI/badge.svg[Build status, link=https://github.com/flycheck/flycheck-eldev/actions?query=workflow%3ACI]
 
 Make {uri-flycheck}[Flycheck] use proper dependencies in
 {uri-eldev}[Eldev] projects.
