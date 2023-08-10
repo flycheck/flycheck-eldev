@@ -8,4 +8,4 @@
 
 
 ;; Avoid including files in test "projects".
-(setf eldev-standard-excludes (append eldev-standard-excludes '("./test/*/")))
+(setf eldev-standard-excludes `(:or ,eldev-standard-excludes "./test/*/"))
