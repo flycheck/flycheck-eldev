@@ -1,9 +1,9 @@
 ; -*- mode: emacs-lisp; lexical-binding: t -*-
 
-(eldev-require-version "0.5")
+(eldev-require-version "1.1")
 
 ;; For `let-alist' on older Emacs versions.
-(eldev-use-package-archive 'gnu)
+(eldev-use-package-archive 'gnu-elpa)
 (eldev-use-package-archive 'melpa)
 
 
