@@ -1,6 +1,6 @@
 ; -*- mode: emacs-lisp; lexical-binding: t -*-
 
-(eldev-require-version "1.1")
+(eldev-require-version "1.8.2")
 
 ;; For `let-alist' on older Emacs versions.
 (eldev-use-package-archive 'gnu-elpa)
@@ -9,3 +9,9 @@
 
 ;; Avoid including files in test "projects".
 (setf eldev-standard-excludes `(:or ,eldev-standard-excludes "./test/*/"))
+
+
+(setf eldev-release-post-release-commit-message "Post-release version bump."
+      eldev-release-post-release-commit (lambda (version)
+                                          (let ((eldev-release-min-version-size 3))
+                                            (eldev-release-next-snapshot-version-unless-already-snapshot version))))
