@@ -1,5 +1,15 @@
+ifndef::env-github[:icons: font]
+ifdef::env-github[]
+:warning-caption: :warning:
+:caution-caption: :fire:
+:important-caption: :exclamation:
+:note-caption: :paperclip:
+:tip-caption: :bulb:
+endif::[]
 :source-language: lisp
 :uri-flycheck: https://www.flycheck.org/
+:uri-flymake: https://www.gnu.org/software/emacs/manual/html_node/emacs/Flymake.html
+:uri-flymake-eldev: https://github.com/emacs-eldev/flymake-eldev
 :uri-eldev: https://github.com/doublep/eldev
 :uri-eldev-installation: https://github.com/doublep/eldev#installation
 :uri-melpa-stable: https://stable.melpa.org/#/flycheck-eldev
@@ -17,6 +27,9 @@ Make {uri-flycheck}[Flycheck] use proper dependencies in
 For a project to be detected, it must contain file `Eldev` or
 `Eldev-local` in its root directory, even if Eldev doesn’t strictly
 require that.
+
+TIP: If you are using {uri-flymake}[Flymake] and not Flycheck, check
+out a similar project, {uri-flymake-eldev}[flymake-eldev].
 
 == Features
 
