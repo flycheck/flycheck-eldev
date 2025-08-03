@@ -1,3 +1,4 @@
+;; -*- lexical-binding: t; -*-
 ;; Using loading root to test that `flycheck-eldev' handles this too.
 (require 'test-util)
 
