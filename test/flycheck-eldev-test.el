@@ -1,3 +1,4 @@
+;; -*- lexical-binding: t; -*-
 (require 'flycheck-eldev)
 (require 'ert)
 (require 'dash)
@@ -148,7 +149,7 @@
 ;; When checking the faulty `Eldev-local', we must not use it for initialization.
 (ert-deftest flycheck-eldev-faulty-eldev-local-2 ()
   (flycheck-eldev--test-with-temp-file "project-a/Eldev-local"
-      (insert "this-variable-certainly-doesnt-exist")
+      (insert ";; -*- lexical-binding: t; -*-\nthis-variable-certainly-doesnt-exist")
     (flycheck-eldev--test "project-a/Eldev-local"
       (flycheck-eldev--test-recheck)
       (flycheck-eldev--test-expect-errors '(:matches "this-variable-certainly-doesnt-exist")))))
@@ -156,7 +157,7 @@
 ;; Test that `flycheck-eldev' really works on Eldev files if those are byte-compilable.
 (ert-deftest flycheck-eldev-suspicious-eldev-local-1 ()
   (flycheck-eldev--test-with-temp-file "project-a/Eldev-local"
-      (insert "(defun just-for-testing () (function-with-this-name-certainly-doesnt-exist))")
+      (insert ";; -*- lexical-binding: t; -*-\n(defun just-for-testing () (function-with-this-name-certainly-doesnt-exist))")
     (flycheck-eldev--test "project-a/Eldev-local"
       (flycheck-eldev--test-recheck)
       (flycheck-eldev--test-expect-errors '(:matches "function-with-this-name-certainly-doesnt-exist")))))
