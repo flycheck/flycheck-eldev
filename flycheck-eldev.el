@@ -199,6 +199,20 @@ If FROM is nil, search from `default-directory'."
 (defun flycheck-eldev--working-directory (&rest _)
   (flycheck-eldev-find-root))
 
+(defun flycheck-eldev--checker-substituted-arguments (checker)
+  "Get the substituted arguments of a CHECKER.
+
+Wrapper for `flycheck-checker-substituted-arguments' which replaces
+\='source-inplace with \='source.
+
+CHECKER is passed to `flycheck-checker-substituted-arguments'."
+  (apply #'append
+         (seq-map (lambda (arg)
+                    (when (eq arg 'source-inplace)
+                      (setq arg 'source))
+                    (flycheck-substitute-argument arg checker))
+                  (flycheck-checker-arguments checker))))
+
 (defun flycheck-eldev--build-command-line ()
   `("--quiet" "--no-time" "--color=never" "--no-debug" "--no-backtrace-on-abort"
     ,@(if (flycheck-eldev-project-trusted-p default-directory)
@@ -208,7 +222,7 @@ If FROM is nil, search from `default-directory'."
           ;; future improvements for free.
           (let* ((super         (let ((flycheck-emacs-lisp-load-path           nil)
                                       (flycheck-emacs-lisp-initialize-packages nil))
-                                  (flycheck-checker-substituted-arguments 'emacs-lisp)))
+                                  (flycheck-eldev--checker-substituted-arguments 'emacs-lisp)))
                  (head          (-drop-last 2 super))
                  (tail          (-take-last 2 super))
                  (filename      (cadr tail))
@@ -242,7 +256,10 @@ If FROM is nil, search from `default-directory'."
                                (eldev-advised
                                 (#'insert-file-contents
                                  :around (lambda (original filename &rest arguments)
-                                           (unless (file-equal-p filename ,real-filename)
+                                           (if (file-equal-p filename ,real-filename)
+                                               ;; Load the temp file
+                                               ;; instead.
+                                               (apply original ,filename arguments)
                                              (apply original filename arguments))))
                                 (funcall original)))))
               ;; When checking project's main file, use the temporary as the main file
