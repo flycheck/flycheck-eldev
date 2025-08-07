@@ -1,6 +1,6 @@
 ;;; flycheck-eldev.el --- Eldev support in Flycheck  -*- lexical-binding: t -*-
 
-;;; Copyright (C) 2020-2023 Paul Pogonyshev
+;;; Copyright (C) 2020-2025 Paul Pogonyshev
 
 ;; Author:     Paul Pogonyshev <pogonyshev@gmail.com>
 ;; Maintainer: Paul Pogonyshev <pogonyshev@gmail.com>
