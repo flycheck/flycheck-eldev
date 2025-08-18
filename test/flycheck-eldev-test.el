@@ -7,6 +7,24 @@
 (defvar flycheck-eldev--test-dir (file-name-directory (or load-file-name (buffer-file-name))))
 
 
+;; Copied from Eldev source code, see documentation there.
+(eval-when-compile
+  (defmacro flycheck-eldev-ert-defargtest (name arguments values &rest body)
+    (declare (indent 3))
+    (let ((function (make-symbol (format "%s:impl" name))))
+      `(progn
+         (cl-macrolet ((skip-unless (form) `(ert--skip-unless ,form)))
+           (defun ,function ,arguments ,@body))
+         ,@(mapcar (lambda (arg-values)
+                     `(ert-deftest ,(intern (format "%s/%s" name (flycheck-eldev--ert-defargtest-format-arguments arg-values))) ()
+                        (,function ,@(if (= (length arguments) 1) (list arg-values) arg-values))))
+                   values))))
+
+  (defun flycheck-eldev--ert-defargtest-format-arguments (arguments)
+    (let ((print-quoted t))
+      (downcase (replace-regexp-in-string " " "/" (replace-regexp-in-string (rx (not (any word "-" " "))) "" (prin1-to-string arguments)))))))
+
+
 (defmacro flycheck-eldev--test (file &rest body)
   (declare (indent 1) (debug (sexp body)))
   (let ((flycheck-eldev-whitelist        nil)
@@ -77,13 +95,15 @@
                (ert-fail (format "expected error not detected: %S" expected))))))))
 
 
-(ert-deftest flycheck-eldev-basics-1 ()
-  (flycheck-eldev--test "project-a/project-a.el"
+(flycheck-eldev-ert-defargtest flycheck-eldev-basics-1 (file)
+                               ("project-a/project-a.el" "project-b/project-b.el" "project-b/project-b-util.el")
+  (flycheck-eldev--test file
     (flycheck-eldev--test-recheck)
     (flycheck-eldev--test-expect-no-errors)))
 
-(ert-deftest flycheck-eldev-basics-2 ()
-  (flycheck-eldev--test "project-a/Eldev"
+(flycheck-eldev-ert-defargtest flycheck-eldev-basics-2 (file)
+                               ("project-a/Eldev" "project-b/Eldev")
+  (flycheck-eldev--test file
     ;; Enable `checkdoc'.  Must be disabled at runtime (currently through our own hack)
     ;; for the test to pass.
     :enable-checkdoc t
@@ -111,8 +131,9 @@
     (flycheck-eldev--test-recheck)
     (flycheck-eldev--test-expect-no-errors)))
 
-(ert-deftest flycheck-eldev-test-file-1 ()
-  (flycheck-eldev--test "project-a/test/project-a.el"
+(flycheck-eldev-ert-defargtest flycheck-eldev-test-file-1 (file)
+                               ("project-a/test/project-a.el" "project-b/test/project-b.el" "project-b/test/project-b-util.el")
+  (flycheck-eldev--test file
     (flycheck-eldev--test-recheck)
     (flycheck-eldev--test-expect-no-errors)))
 
