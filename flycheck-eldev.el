@@ -120,6 +120,19 @@ concerns when checking Eldev (or any Elisp) projects."
                   (const :tag "Don't trust" dont-trust)
                   (const :tag "Trust if ever initialized" trust-if-ever-initialized)))
 
+(defcustom flycheck-eldev-outside-temp-files t
+  "Normally, Flycheck creates visible files in project directory.
+This sometimes leads to various annoying side effects, for example
+interference with Git or file watchers on project directory.  For this
+reason, `flycheck-eldev' puts such files in `temporary-file-directory'
+by default (utilizing built-in Flycheck capability, that is simply not
+used for Elisp).
+
+However, if this causes any issues, you can revert to the standard
+Flycheck behavior by setting this to nil."
+  :group 'flycheck-eldev
+  :type  'boolean)
+
 
 (defvar flycheck-eldev-active t
   "Whether Eldev extension to Flycheck is active.")
@@ -199,20 +212,6 @@ If FROM is nil, search from `default-directory'."
 (defun flycheck-eldev--working-directory (&rest _)
   (flycheck-eldev-find-root))
 
-(defun flycheck-eldev--checker-substituted-arguments (checker)
-  "Get the substituted arguments of a CHECKER.
-
-Wrapper for `flycheck-checker-substituted-arguments' which replaces
-\='source-inplace with \='source.
-
-CHECKER is passed to `flycheck-checker-substituted-arguments'."
-  (apply #'append
-         (seq-map (lambda (arg)
-                    (when (eq arg 'source-inplace)
-                      (setq arg 'source))
-                    (flycheck-substitute-argument arg checker))
-                  (flycheck-checker-arguments checker))))
-
 (defun flycheck-eldev--build-command-line ()
   `("--quiet" "--no-time" "--color=never" "--no-debug" "--no-backtrace-on-abort"
     ,@(if (flycheck-eldev-project-trusted-p default-directory)
@@ -221,8 +220,15 @@ CHECKER is passed to `flycheck-checker-substituted-arguments'."
           ;; rewrite the command line provided by the standard checker, so we get any
           ;; future improvements for free.
           (let* ((super         (let ((flycheck-emacs-lisp-load-path           nil)
-                                      (flycheck-emacs-lisp-initialize-packages nil))
-                                  (flycheck-eldev--checker-substituted-arguments 'emacs-lisp)))
+                                      (flycheck-emacs-lisp-initialize-packages nil)
+                                      (original-command-template               (flycheck-checker-get 'emacs-lisp 'command)))
+                                  (unwind-protect
+                                      (progn
+                                        (when flycheck-eldev-outside-temp-files
+                                          (setf (flycheck-checker-get 'emacs-lisp 'command)
+                                                (mapcar (lambda (x) (if (eq x 'source-inplace) 'source x)) original-command-template)))
+                                        (flycheck-checker-substituted-arguments 'emacs-lisp))
+                                    (setf (flycheck-checker-get 'emacs-lisp 'command) original-command-template))))
                  (head          (-drop-last 2 super))
                  (tail          (-take-last 2 super))
                  (filename      (cadr tail))
@@ -257,9 +263,9 @@ CHECKER is passed to `flycheck-checker-substituted-arguments'."
                                 (#'insert-file-contents
                                  :around (lambda (original filename &rest arguments)
                                            (if (file-equal-p filename ,real-filename)
-                                               ;; Load the temp file
-                                               ;; instead.
-                                               (apply original ,filename arguments)
+                                               (when ,flycheck-eldev-outside-temp-files
+                                                 ;; Load the temp file instead.
+                                                 (apply original ,filename arguments))
                                              (apply original filename arguments))))
                                 (funcall original)))))
               ;; When checking project's main file, use the temporary as the main file
