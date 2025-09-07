@@ -38,21 +38,26 @@
         (:unknown-projects (setf flycheck-eldev-unknown-projects (pop body)))
         (:enable-checkdoc  (if (pop body)
                                (push 'emacs-lisp-checkdoc enabled-checkers)
+                             ;; We don't use `emacs-lisp-checkdoc' unless explicitly enabled.
                              (setf enabled-checkers (delq 'emacs-lisp-checkdoc enabled-checkers))))))
-    ;; Don't use `emacs-lisp-checkdoc'.
-    `(let ((flycheck-checkers                   (--filter (memq it ',enabled-checkers) flycheck-checkers))
-           (flycheck-disabled-checkers          nil)
-           (flycheck-check-syntax-automatically nil)
-           (flycheck-eldev-whitelist            ',flycheck-eldev-whitelist)
-           (flycheck-eldev-blacklist            ',flycheck-eldev-blacklist)
-           (flycheck-eldev-unknown-projects     ',flycheck-eldev-unknown-projects)
-           (file                                (expand-file-name ,file flycheck-eldev--test-dir)))
-       (with-temp-buffer
-         (insert-file-contents file t)
-         (setf default-directory (file-name-directory file))
-         (emacs-lisp-mode)
-         (flycheck-mode 1)
-         ,@body))))
+    ;; Currently not testing if `flycheck-eldev-outside-temp-files' actually achieves what it promises, but at
+    ;; least make sure that everything works regardless if that is set to t or nil.
+    `(dolist (outside-temp-files '(nil t))
+       (ert-info ((format "flycheck-eldev-outside-temp-files = %s" outside-temp-files))
+         (let ((flycheck-checkers                   (--filter (memq it ',enabled-checkers) flycheck-checkers))
+               (flycheck-disabled-checkers          nil)
+               (flycheck-check-syntax-automatically nil)
+               (flycheck-eldev-whitelist            ',flycheck-eldev-whitelist)
+               (flycheck-eldev-blacklist            ',flycheck-eldev-blacklist)
+               (flycheck-eldev-unknown-projects     ',flycheck-eldev-unknown-projects)
+               (flycheck-eldev-outside-temp-files   outside-temp-files)
+               (file                                (expand-file-name ,file flycheck-eldev--test-dir)))
+           (with-temp-buffer
+             (insert-file-contents file t)
+             (setf default-directory (file-name-directory file))
+             (emacs-lisp-mode)
+             (flycheck-mode 1)
+             ,@body))))))
 
 (defmacro flycheck-eldev--test-with-temp-file (file content-creation &rest body)
   (declare (indent 2) (debug (sexp form body)))
