@@ -101,13 +101,13 @@
 
 
 (flycheck-eldev-ert-defargtest flycheck-eldev-basics-1 (file)
-                               ("project-a/project-a.el" "project-b/project-b.el" "project-b/project-b-util.el")
+                               ("project-a/project-a.el" "project-b/project-b.el" "project-b/project-b-util.el" "project-c/project-c.el" "project-c/project-c-util.el")
   (flycheck-eldev--test file
     (flycheck-eldev--test-recheck)
     (flycheck-eldev--test-expect-no-errors)))
 
 (flycheck-eldev-ert-defargtest flycheck-eldev-basics-2 (file)
-                               ("project-a/Eldev" "project-b/Eldev")
+                               ("project-a/Eldev" "project-b/Eldev" "project-c/Eldev")
   (flycheck-eldev--test file
     ;; Enable `checkdoc'.  Must be disabled at runtime (currently through our own hack)
     ;; for the test to pass.
@@ -137,7 +137,9 @@
     (flycheck-eldev--test-expect-no-errors)))
 
 (flycheck-eldev-ert-defargtest flycheck-eldev-test-file-1 (file)
-                               ("project-a/test/project-a.el" "project-b/test/project-b.el" "project-b/test/project-b-util.el")
+                               ("project-a/test/project-a.el"
+                                "project-b/test/project-b.el" "project-b/test/project-b-util.el"
+                                "project-c/test/project-c.el" "project-c/test/project-c-util.el")
   (flycheck-eldev--test file
     (flycheck-eldev--test-recheck)
     (flycheck-eldev--test-expect-no-errors)))
@@ -149,12 +151,15 @@
       (flycheck-eldev--test-expect-errors '(:matches "dependency-a")))))
 
 ;; Test that removing dependencies gives errors immediately.
-(ert-deftest flycheck-eldev-remove-dependency-1 ()
-  (flycheck-eldev--test "project-a/project-a.el"
-    (search-forward "(dependency-a \"1.0\")")
+(flycheck-eldev-ert-defargtest flycheck-eldev-remove-dependency-1 (file dependency)
+                               (("project-a/project-a.el" 'dependency-a)
+                                ("project-b/project-b.el" 'dependency-b)
+                                ("project-c/project-c.el" 'dependency-b))
+  (flycheck-eldev--test file
+    (re-search-forward (format "(%s \"[^\"]+\")" dependency))
     (replace-match "")
     (flycheck-eldev--test-recheck)
-    (flycheck-eldev--test-expect-errors '(:matches "dependency-a"))))
+    (flycheck-eldev--test-expect-errors `(:matches ,(symbol-name dependency)))))
 
 ;; Test that adding unaccessible dependencies gives errors immediately.
 (ert-deftest flycheck-eldev-add-dependency-1 ()

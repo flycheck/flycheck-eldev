@@ -1,0 +1,7 @@
+; -*- mode: emacs-lisp; lexical-binding: t -*-
+
+(eldev-use-package-archive `("archive-a" . ,(expand-file-name "../package-archive-a")))
+
+;; The point of this test project is to verify that explicitly set `eldev-project-main-file' still works as
+;; expected.
+(setf eldev-project-main-file "project-c.el")
