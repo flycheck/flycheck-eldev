@@ -257,23 +257,16 @@ If FROM is nil, search from `default-directory'."
               ;; `eldev-project-main-file' is specified, this does nothing.
               "--setup-first"
               ,(flycheck-sexp-to-string
-                `(advice-add #'eldev--package-dir-info :around
+                `(advice-add #'eldev-package-descriptor :around
                              (lambda (original)
                                (eldev-advised
                                 (#'insert-file-contents
                                  :around (lambda (original filename &rest arguments)
                                            (if (file-equal-p filename ,real-filename)
-                                               (when ,flycheck-eldev-outside-temp-files
-                                                 ;; Load the temp file instead.
-                                                 (apply original ,filename arguments))
+                                               ;; Load the temp file instead.
+                                               (apply original ,filename arguments)
                                              (apply original filename arguments))))
                                 (funcall original)))))
-              ;; When checking project's main file, use the temporary as the main file
-              ;; instead.
-              "--setup"
-              ,(flycheck-sexp-to-string
-                `(when (and eldev-project-main-file (file-equal-p eldev-project-main-file ,real-filename))
-                   (setf eldev-project-main-file ,filename)))
               ;; Special handling for test files: load extra dependencies as if testing
               ;; now.  Likewise for loading roots.
               "--setup"
