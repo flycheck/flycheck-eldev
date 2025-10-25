@@ -4,7 +4,7 @@
 
 ;; Author:     Paul Pogonyshev <pogonyshev@gmail.com>
 ;; Maintainer: Paul Pogonyshev <pogonyshev@gmail.com>
-;; Version:    1.2
+;; Version:    1.2.1snapshot
 ;; Keywords:   tools, convenience
 ;; Homepage:   https://github.com/flycheck/flycheck-eldev
 ;; Package-Requires: ((flycheck "32") (dash "2.17") (emacs "24.4"))
